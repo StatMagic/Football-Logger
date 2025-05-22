@@ -60,6 +60,7 @@ const player360ViewModeRadios = document.querySelectorAll('input[name="player360
 const player360SourceModeRadios = document.querySelectorAll('input[name="player360SourceMode"]');
 const player360RosterSelect = document.getElementById('player360RosterSelect');
 const player360VideoPlayerContainer = document.getElementById('player360VideoPlayerContainer');
+const player360ManualIdDisplay = document.getElementById('player360ManualIdDisplay'); 
 const uploadMatchFileButton = document.getElementById('uploadMatchFileButton');
 const matchFileUploadInput = document.getElementById('matchFileUploadInput');
 
@@ -140,12 +141,14 @@ if (player360RosterSelect) {
 }
 
 function refresh360Content() {
+    const manualIdDisp = player360ManualIdDisplay; 
     if (state.player360SourceMode === 'activePlayer' && state.selectedPlayerId) {
         render360Content(playerDetailsMap.get(state.selectedPlayerId));
     } else if (state.player360SourceMode === 'fullRoster' && player360RosterSelect.value) {
         render360Content(playerDetailsMap.get(player360RosterSelect.value));
     } else {
         player360VideoPlayerContainer.innerHTML = `<div class="video-placeholder-text">Player 360° view will appear here.</div>`;
+        if(manualIdDisp) manualIdDisp.textContent = ''; 
     }
 }
 
@@ -173,7 +176,8 @@ function logActionFromButton(buttonId) {
     const timestamp = getVideoPlayerTimeStamp();
     const teamName = playerDetails.team === 'teamA' ? state.match.teamA : state.match.teamB;
 
-    const logEntry = `Player (${playerDetails.playerName}, ID: ${playerDetails.playerId}, Jersey: ${playerDetails.jerseyId}) | Team (${teamName}) | Action: ${actionText} | Timestamp: ${timestamp}`;
+    // MODIFIED LOG FORMAT
+    const logEntry = `Player (Name: ${playerDetails.playerName || 'N/A'}, PID: ${playerDetails.playerId || 'N/A'}, Jersey: ${playerDetails.jerseyId || 'N/A'}, Manual ID: ${playerDetails.manualId || 'N/A'}) | Team (${teamName}) | Action: ${actionText} | Timestamp: ${timestamp}`;
     actionLog.push(logEntry);
     gameLogTextBox.value += logEntry + '\n';
     gameLogTextBox.scrollTop = gameLogTextBox.scrollHeight;
@@ -316,43 +320,35 @@ function handlePlayerSelection(uniqueId) {
     if (!clickedButton) return;
 
     const playerDetails = playerDetailsMap.get(uniqueId);
-    if (!playerDetails) return; // Should not happen if button exists
+    if (!playerDetails) return; 
 
     const previouslySelectedPlayerId = state.selectedPlayerId;
 
-    // Visual update for buttons first
     allPlayerButtons.forEach(button => button.classList.remove('selected'));
 
     if (previouslySelectedPlayerId === uniqueId) {
-        // Clicked the SAME player AGAIN - DESELECTING
         state.selectedPlayerId = null;
-        enableActionButtons(false); // Disable action buttons
-        // LOGGING: "Player Unselected" or similar, or NO log at all for unselection.
-        // For now, let's not log unselection to keep log cleaner and only log positive selections.
-        // If you want to log unselection, you can add:
-        // const timestamp = getVideoPlayerTimeStamp();
-        // const logEntry = `Player Unselected: ${playerDetails.playerName} (ID: ${playerDetails.playerId}) | Timestamp: ${timestamp}`;
-        // actionLog.push(logEntry); gameLogTextBox.value += logEntry + '\n'; gameLogTextBox.scrollTop = gameLogTextBox.scrollHeight;
-        // showGreenTick(`Unselected: ${playerDetails.playerName}`);
+        enableActionButtons(false); 
 
         if (state.player360SourceMode === 'activePlayer') {
             player360VideoPlayerContainer.innerHTML = `<div class="video-placeholder-text">Player 360° view will appear here.</div>`;
+            if (player360ManualIdDisplay) player360ManualIdDisplay.textContent = ''; 
         }
     } else {
-        // Clicked a NEW player, or NO player was previously selected
         clickedButton.classList.add('selected');
         state.selectedPlayerId = uniqueId;
-        enableActionButtons(true); // Enable action buttons
+        enableActionButtons(true); 
 
-        // LOGGING: "Player Selected" - ONLY when a player becomes newly active
         const timestamp = getVideoPlayerTimeStamp();
         const teamName = playerDetails.team === 'teamA' ? state.match.teamA : state.match.teamB;
-        const logEntry = `Player (${playerDetails.playerName}, ID: ${playerDetails.playerId}, Jersey: ${playerDetails.jerseyId}) | Team (${teamName}) | Action: Player Selected | Timestamp: ${timestamp}`;
+
+        // MODIFIED LOG FORMAT
+        const logEntry = `Player (Name: ${playerDetails.playerName || 'N/A'}, PID: ${playerDetails.playerId || 'N/A'}, Jersey: ${playerDetails.jerseyId || 'N/A'}, Manual ID: ${playerDetails.manualId || 'N/A'}) | Team (${teamName}) | Action: Player Selected | Timestamp: ${timestamp}`;
         actionLog.push(logEntry);
         gameLogTextBox.value += logEntry + '\n';
         gameLogTextBox.scrollTop = gameLogTextBox.scrollHeight;
         showGreenTick(`Selected: ${playerDetails.playerName}`);
-        copyToClipboard(); // Copy after a meaningful log
+        copyToClipboard();
 
         if (state.player360SourceMode === 'activePlayer') {
             render360Content(playerDetails);
@@ -362,10 +358,18 @@ function handlePlayerSelection(uniqueId) {
 
 function render360Content(details) {
     player360VideoPlayerContainer.innerHTML = '';
+    const manualIdDisp = player360ManualIdDisplay; 
+
     if (!details) {
         player360VideoPlayerContainer.innerHTML = `<div class="video-placeholder-text">Player details not found.</div>`;
+        if(manualIdDisp) manualIdDisp.textContent = ''; 
         return;
     }
+
+    if(manualIdDisp) { 
+        manualIdDisp.textContent = `Manual ID: ${details.manualId || 'N/A'}`;
+    }
+
     if (state.player360ViewType === 'thumbnail') {
         if (details.video_360_thumbnail_src) {
             const imgElement = document.createElement('img');
@@ -413,6 +417,7 @@ function savePlayerDetails(uniqueId) {
     playerDetailsMap.set(uniqueId, details);
     document.querySelectorAll(`[data-unique-id="${uniqueId}"]`).forEach(updatePlayerButtonText);
     populatePlayer360RosterSelect();
+    refresh360Content(); 
     playerEditPopup.style.display = 'none';
 }
 function updateAllPlayerButtons() {
@@ -700,10 +705,55 @@ function resetApplicationStateForNewFile() {
     state.player360ViewType = 'video'; document.querySelector('input[name="player360ViewMode"][value="video"]').checked = true;
     state.player360SourceMode = 'fullRoster'; document.querySelector('input[name="player360SourceMode"][value="fullRoster"]').checked = true;
     document.querySelector('.player-360-full-roster-controls').style.display = 'block';
+    if(player360ManualIdDisplay) player360ManualIdDisplay.textContent = ''; 
     updateLiveScoreDisplay(); updateMatchDetailsDisplay();
     actionLog = []; gameLogTextBox.value = "";
     console.log("Application state reset for new file.");
 }
+
+function formatScorersForLog(scorers) {
+    if (scorers.length === 0) return "None";
+    return scorers.map(ev =>
+        `${ev.scorerName}${ev.isOwnGoal ? ' (OG)' : ''}${ev.count > 1 ? ` (${ev.count})` : ''}`
+    ).join(', ');
+}
+
+function logMatchDetailsAndScorers() {
+    const { teamA, teamB, team1_score, team2_score, type, date, duration, avg_age, allGoalEvents } = state.match;
+
+    const t1GE = allGoalEvents.filter(ev => ev.scoredForTeamId === 'team1');
+    const t2GE = allGoalEvents.filter(ev => ev.scoredForTeamId === 'team2');
+
+    const aggregateScorers = (events) => {
+        const agg = new Map();
+        events.forEach(ev => {
+            const key = `${ev.scorerPlayerId}-${ev.isOwnGoal}`; 
+            if (agg.has(key)) {
+                agg.get(key).count += ev.count;
+            } else {
+                agg.set(key, { ...ev });
+            }
+        });
+        return Array.from(agg.values());
+    };
+
+    const teamAScorersList = formatScorersForLog(aggregateScorers(t1GE));
+    const teamBScorersList = formatScorersForLog(aggregateScorers(t2GE));
+
+    const matchInfoLog = `--- MATCH DETAILS LOADED ---
+Match: ${type || 'N/A'} on ${date || 'N/A'}
+Duration: ${duration || 'N/A'} min
+Avg Age Category: ${avg_age || 'N/A'}
+Score: ${teamA || 'Team A'} ${team1_score} - ${team2_score} ${teamB || 'Team B'}
+${teamA || 'Team A'} Scorers: ${teamAScorersList}
+${teamB || 'Team B'} Scorers: ${teamBScorersList}
+-----------------------------`;
+
+    actionLog.push(matchInfoLog);
+    gameLogTextBox.value += (gameLogTextBox.value.length > 0 && !gameLogTextBox.value.endsWith('\n') ? '\n' : '') + matchInfoLog + '\n';
+    gameLogTextBox.scrollTop = gameLogTextBox.scrollHeight;
+}
+
 
 async function processUploadedMatchFile(file) {
     if (!file || !file.name.endsWith('.zip')) { alert("Please upload a valid ZIP file."); return; }
@@ -724,6 +774,9 @@ async function processUploadedMatchFile(file) {
 
         updateMatchDetailsDisplay(); updateLiveScoreDisplay(); updateAllPlayerButtons(); populatePlayer360RosterSelect();
         document.querySelector('input[name="layout"][value="name"]').checked = true; state.currentLayout = 'name';
+        
+        logMatchDetailsAndScorers(); 
+
         alert("Match file processed successfully!");
     } catch (error) {
         console.error("Error processing ZIP file:", error); alert("Error processing ZIP file.");
@@ -745,8 +798,8 @@ function parseGameDetailsCSV(csvText) {
     state.match.teamB = matchData.team2_name || state.match.teamB;
     state.match.team1_name_from_csv = matchData.team1_name || "Team A";
     state.match.team2_name_from_csv = matchData.team2_name || "Team B";
-    state.match.team1_score = parseInt(matchData.team1_score, 10) || 0;
-    state.match.team2_score = parseInt(matchData.team2_score, 10) || 0;
+    state.match.team1_score = parseInt(matchData.team1_score, 10) || 0; 
+    state.match.team2_score = parseInt(matchData.team2_score, 10) || 0; 
     state.match.avg_age = matchData.average_age_category || state.match.avg_age;
 }
 
@@ -865,6 +918,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMatchDetailsDisplay(); updateLiveScoreDisplay(); populatePlayer360RosterSelect();
     setupActionButtons();
     enableActionButtons(false);
+    if(player360ManualIdDisplay) player360ManualIdDisplay.textContent = ''; 
     const nameLayoutRadio = document.querySelector('input[name="layout"][value="name"]'); if (nameLayoutRadio) nameLayoutRadio.checked = true;
     const videoViewRadio = document.querySelector('input[name="player360ViewMode"][value="video"]'); if (videoViewRadio) videoViewRadio.checked = true;
     const fullRosterSourceRadio = document.querySelector('input[name="player360SourceMode"][value="fullRoster"]'); if (fullRosterSourceRadio) fullRosterSourceRadio.checked = true;

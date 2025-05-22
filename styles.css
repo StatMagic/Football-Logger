@@ -1,4 +1,3 @@
-/* General Layout */
 body {
     font-family: sans-serif;
     margin: 0;
@@ -253,6 +252,18 @@ body {
     background-color: #fff;
     font-size: 0.95em;
     box-sizing: border-box;
+}
+
+.player-360-manual-id-info { /* ADDED FOR MANUAL ID DISPLAY */
+    font-size: 0.85em;
+    color: #444;
+    margin-bottom: 6px;
+    padding: 3px 0;
+    text-align: center;
+    min-height: 1.1em;
+    font-weight: 500;
+    background-color: #e9ecef;
+    border-radius: 3px;
 }
 
 #player360VideoPlayerContainer {
