@@ -30,17 +30,6 @@
                                 <label><input type="radio" name="player360ViewMode" value="thumbnail"> Thumbnail</label> <!-- Shorter labels -->
                             </div>
                         </div>
-                        <div class="player-360-source-mode-selection">
-                            <label><input type="radio" name="player360SourceMode" value="fullRoster" checked> Full Roster</label>
-                            <label><input type="radio" name="player360SourceMode" value="activePlayer"> Active Player</label>
-                        </div>
-                        <div class="player-360-full-roster-controls">
-                            <label for="player360RosterSelect">Select Player:</label>
-                            <select id="player360RosterSelect">
-                                <option value="">-- Select Player --</option>
-                                <!-- Options will be populated by JS -->
-                            </select>
-                        </div>
                         <div id="player360ManualIdDisplay" class="player-360-manual-id-info"></div> <!-- ADDED FOR MANUAL ID DISPLAY -->
                         <div id="player360VideoPlayerContainer">
                             <div class="video-placeholder-text">Player 360° view will appear here.</div>
@@ -55,7 +44,16 @@
 
                 <!-- Player Selection Panel (Left) -->
                 <section class="panel player-panel area">
-                   <h3>Players</h3>
+                   <div class="panel-header">
+                       <h3>Players</h3>
+                       <div class="logging-mode-toggle">
+                           <label class="switch">
+                               <input type="checkbox" id="loggingModeToggle">
+                               <span class="slider round"></span>
+                           </label>
+                           <span class="toggle-label">Logging Mode</span>
+                       </div>
+                   </div>
                    <div class="layout-controls-inline">
                        <label><input type="radio" name="layout" value="pid"> PID</label>
                        <label><input type="radio" name="layout" value="manual"> Manual</label>
@@ -130,6 +128,8 @@
                             <button id="woodworkBtn">Woodwork</button>
                             <button id="moiBtn">MOI</button>
                             <button id="aerialDuelBtn">Aerial Duel</button>
+                            <button id="highlightWorthyBtn">Highlight Worthy</button>
+                            <button id="skillMoveBtn">Skill Move</button>
                         </div>
                     </div>
                     <button id="undoButton" class="log-action-button">Undo Last Log</button>
@@ -167,6 +167,7 @@
                      <div class="input-container match-control">
                         <input type="file" id="matchFileUploadInput" accept=".zip" style="display: none;">
                         <button id="uploadMatchFileButton">Upload Match File (ZIP)</button>
+                        <button id="resetGameLogButton">Reset Game Log</button>
                      </div>
                      <div class="match-details-display-compact">
                         <h3>Match Summary</h3>
@@ -179,7 +180,7 @@
             <div class="text-box-container">
                  <div class="text-box area">
                      <h3>Game Log</h3>
-                     <textarea id="gameLogTextBox"></textarea>
+                     <textarea id="gameLogTextBox" readonly></textarea>
                  </div>
                  <div class="text-box area">
                      <h3>Game Highlights</h3>
@@ -205,8 +206,45 @@
     </div>
     <div id="playerEditPopup" class="popup">
         <div class="popup-content">
-            <span class="close">×</span>
-            <!-- Player edit form injected here -->
+            <h3>Edit Player Details</h3>
+            <div class="form-group">
+                <label for="editManualId">Manual ID:</label>
+                <input type="text" id="editManualId">
+            </div>
+            <div class="form-group">
+                <label for="editJerseyId">Jersey Number:</label>
+                <input type="text" id="editJerseyId">
+            </div>
+            <div class="form-group">
+                <label for="editPlayerName">Player Name:</label>
+                <input type="text" id="editPlayerName">
+            </div>
+            <div id="playerImageUploadSection" class="form-group" style="display: none;">
+                <label for="playerImageUpload">Player Image:</label>
+                <input type="file" id="playerImageUpload" accept="image/*" style="display: none;">
+                <button id="uploadPlayerImageBtn" class="upload-btn">Upload Image</button>
+                <div id="playerImagePreview" class="image-preview"></div>
+                <div id="uploadSuccessMessage" class="upload-success-message">Image uploaded successfully!</div>
+            </div>
+            <div class="button-group">
+                <button onclick="savePlayerDetails()">Save</button>
+                <button onclick="document.getElementById('playerEditPopup').style.display = 'none'">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goal Confirmation Popup -->
+    <div id="goalConfirmationPopup" class="popup">
+        <div class="popup-content">
+            <h2>Confirm Action</h2>
+            <div id="goalConfirmationContent">
+                <div id="goalPlayerInfo"></div>
+                <div id="goalPlayerPreview"></div>
+            </div>
+            <div class="button-group">
+                <button onclick="confirmGoalAction()" class="confirm-btn">Confirm</button>
+                <button onclick="cancelGoalAction()" class="cancel-btn">Cancel</button>
+            </div>
         </div>
     </div>
 

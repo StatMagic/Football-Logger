@@ -214,13 +214,11 @@ body {
     border-radius: 0;
     margin-bottom: 0;
 }
-.player-360-view-mode-selection label,
-.player-360-source-mode-selection label {
+.player-360-view-mode-selection label {
     cursor: pointer;
     padding: 2px 4px;
 }
-.player-360-view-mode-selection input[type="radio"],
-.player-360-source-mode-selection input[type="radio"] {
+.player-360-view-mode-selection input[type="radio"] {
     margin-right: 2px;
     vertical-align: middle;
 }
@@ -556,16 +554,42 @@ body {
 #calculateStats:hover { background-color: #138496; }
 
 .popup {
-    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background-color: rgba(0,0,0,0.65); justify-content: center; align-items: center;
-    z-index: 1000; padding: 20px; box-sizing: border-box; overflow-y: auto;
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
 }
+
 .popup-content {
-    background-color: white; padding: 30px; border-radius: 8px; position: relative;
-    width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3); animation: popupFadeIn 0.3s ease-out;
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    max-width: 500px;
+    width: 90%;
+    position: relative;
 }
-@keyframes popupFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+.upload-success-message {
+    color: #28a745;
+    font-size: 0.9em;
+    margin-top: 8px;
+    display: none;
+    animation: fadeOut 2s forwards;
+    animation-delay: 1s;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
 .close {
     position: absolute; right: 15px; top: 15px; font-size: 2em; font-weight: bold;
     line-height: 1; cursor: pointer; color: #aaa; transition: color 0.2s;
@@ -576,15 +600,125 @@ body {
     text-align: center; border-bottom: 1px solid #eee; padding-bottom: 15px;
 }
 .edit-form, .highlights-form { display: flex; flex-direction: column; gap: 20px; }
-.form-group { display: flex; flex-direction: column; gap: 8px; }
-.form-group label { font-weight: 600; font-size: 0.95em; color: #555; }
-.form-group input[type="text"], .form-group textarea {
-    padding: 10px 12px; border: 1px solid #ccc; border-radius: 4px;
-    font-size: 1em; width: 100%; box-sizing: border-box;
+.form-group {
+    margin-bottom: 15px;
 }
-.form-group input[type="text"]:focus, .form-group textarea:focus {
-    border-color: #007bff; box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25); outline: none;
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #495057;
 }
+
+.form-group input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.upload-btn {
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s;
+}
+
+.upload-btn:hover {
+    background-color: #dee2e6;
+}
+
+.image-preview {
+    margin-top: 10px;
+    max-width: 200px;
+    max-height: 200px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    overflow: hidden;
+    display: none;
+}
+
+.image-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.confirm-btn {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.confirm-btn:hover {
+    background-color: #45a049;
+}
+
+.cancel-btn {
+    background-color: #f44336;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.cancel-btn:hover {
+    background-color: #da190b;
+}
+
+#goalPlayerInfo {
+    text-align: left;
+    font-size: 16px;
+    margin: 15px 0;
+    padding: 10px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+}
+
+#goalPlayerInfo div {
+    margin: 5px 0;
+}
+
+#goalPlayerInfo strong {
+    display: inline-block;
+    width: 120px;
+    color: #666;
+}
+
+#goalPlayerPreview {
+    width: 100%;
+    height: 200px;
+    margin: 15px 0;
+    background-color: #f5f5f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#goalPlayerPreview img,
+#goalPlayerPreview video {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
 .edit-form button, .popup-buttons button {
     padding: 12px 25px; font-size: 1em; font-weight: 500; border: none;
     border-radius: 5px; cursor: pointer; transition: background-color 0.3s, transform 0.1s ease;
@@ -706,4 +840,91 @@ body {
     border-color: #1c7430; /* Darker green border */
     box-shadow: 0 0 8px rgba(40, 167, 69, 0.5); /* Green glow */
     /* transform: scale(1.02); /* Optional: slight scale up */
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dotted #ccc;
+}
+
+.logging-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toggle-label {
+    font-size: 0.9em;
+    color: #495057;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #2196F3;
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+
+.slider.round {
+    border-radius: 20px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Disabled state for action buttons */
+.action-panel .action-section button.disabled {
+    background-color: #f8f9fa;
+    color: #adb5bd;
+    border-color: #e9ecef;
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+    pointer-events: none;
 }

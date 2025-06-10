@@ -27,8 +27,8 @@ const state = {
         stop: "",
         currentState: "START"
     },
-    player360SourceMode: 'fullRoster',
     player360ViewType: 'video',
+    loggingMode: false
 };
 
 const playerDetailsMap = new Map();
@@ -37,6 +37,7 @@ let actionLog = []; // Stores string log entries
 let highlightsLog = [];
 let allHighlightsLog = [];
 let videoPlayer;
+let pendingGoalAction = null;
 
 const teamAPlayerButtonsContainer = document.getElementById('teamAPlayerButtons');
 const teamBPlayerButtonsContainer = document.getElementById('teamBPlayerButtons');
@@ -57,12 +58,15 @@ const youtubeVideoIdInput = document.getElementById('youtubeVideoIdInput');
 const updateYoutubeVideoButton = document.getElementById('updateYoutubeVideoButton');
 const displayMatchSummaryText = document.getElementById('displayMatchSummaryText');
 const player360ViewModeRadios = document.querySelectorAll('input[name="player360ViewMode"]');
-const player360SourceModeRadios = document.querySelectorAll('input[name="player360SourceMode"]');
 const player360RosterSelect = document.getElementById('player360RosterSelect');
 const player360VideoPlayerContainer = document.getElementById('player360VideoPlayerContainer');
 const player360ManualIdDisplay = document.getElementById('player360ManualIdDisplay'); 
 const uploadMatchFileButton = document.getElementById('uploadMatchFileButton');
 const matchFileUploadInput = document.getElementById('matchFileUploadInput');
+const playerImageUpload = document.getElementById('playerImageUpload');
+const uploadPlayerImageBtn = document.getElementById('uploadPlayerImageBtn');
+const playerImagePreview = document.getElementById('playerImagePreview');
+const playerImageUploadSection = document.getElementById('playerImageUploadSection');
 
 const actionButtonHotkeys = new Map([
     ['passBtn', { key: 'P', shiftKey: false, display: '(P)' }],
@@ -88,7 +92,9 @@ const actionButtonHotkeys = new Map([
     ['headerBtn', { key: 'A', shiftKey: false, display: '(A)' }],
     ['woodworkBtn', { key: 'W', shiftKey: false, display: '(W)' }],
     ['moiBtn', { key: 'Q', shiftKey: false, display: '(Q)' }],
-    ['aerialDuelBtn', { key: 'Z', shiftKey: false, display: '(Z)' }]
+    ['aerialDuelBtn', { key: 'Z', shiftKey: false, display: '(Z)' }],
+    ['highlightWorthyBtn', { key: 'B', shiftKey: false, display: '(B)' }],
+    ['skillMoveBtn', { key: 'K', shiftKey: false, display: '(K)' }]
 ]);
 
 
@@ -121,39 +127,53 @@ player360ViewModeRadios.forEach(radio => {
     });
 });
 
-player360SourceModeRadios.forEach(radio => {
-    radio.addEventListener('change', (event) => {
-        state.player360SourceMode = event.target.value;
-        const rosterControls = document.querySelector('.player-360-full-roster-controls');
-        if (rosterControls) {
-            rosterControls.style.display = state.player360SourceMode === 'fullRoster' ? 'block' : 'none';
-        }
-        refresh360Content();
+if (uploadPlayerImageBtn && playerImageUpload) {
+    uploadPlayerImageBtn.addEventListener('click', () => {
+        playerImageUpload.click();
     });
-});
 
-if (player360RosterSelect) {
-    player360RosterSelect.addEventListener('change', () => {
-        if (state.player360SourceMode === 'fullRoster') {
-           refresh360Content();
+    playerImageUpload.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // Clear and show preview
+                playerImagePreview.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                playerImagePreview.appendChild(img);
+                playerImagePreview.style.display = 'block';
+
+                // Show success message
+                const successMessage = document.getElementById('uploadSuccessMessage');
+                if (successMessage) {
+                    // Reset the animation by removing and re-adding the element
+                    const newMessage = successMessage.cloneNode(true);
+                    successMessage.parentNode.replaceChild(newMessage, successMessage);
+                    newMessage.style.display = 'block';
+                    newMessage.style.animation = 'fadeOut 2s forwards';
+                    newMessage.style.animationDelay = '1s';
+                }
+
+                // Ensure the upload section is visible
+                if (playerImageUploadSection) {
+                    playerImageUploadSection.style.display = 'block';
+                }
+            };
+            reader.readAsDataURL(file);
         }
     });
 }
 
 function refresh360Content() {
     const manualIdDisp = player360ManualIdDisplay; 
-    if (state.player360SourceMode === 'activePlayer' && state.selectedPlayerId) {
+    if (state.selectedPlayerId) {
         render360Content(playerDetailsMap.get(state.selectedPlayerId));
-    } else if (state.player360SourceMode === 'fullRoster' && player360RosterSelect.value) {
-        render360Content(playerDetailsMap.get(player360RosterSelect.value));
     } else {
         player360VideoPlayerContainer.innerHTML = `<div class="video-placeholder-text">Player 360° view will appear here.</div>`;
         if(manualIdDisp) manualIdDisp.textContent = ''; 
     }
 }
-
-document.querySelector('.player-360-full-roster-controls').style.display = 'block';
-
 
 function logActionFromButton(buttonId) {
     if (!state.selectedPlayerId) {
@@ -169,6 +189,10 @@ function logActionFromButton(buttonId) {
     const actionButton = document.getElementById(buttonId);
     if (!actionButton) {
         alert(`Error: Action button with ID ${buttonId} not found.`);
+        return;
+    }
+
+    if (buttonId === 'goalBtn' || buttonId === 'ownGoalBtn') {  
         return;
     }
 
@@ -194,11 +218,12 @@ function setupActionButtons() {
             button.textContent = `${originalText} ${hotkeyConfig.display}`;
 
             button.addEventListener('click', () => {
-                if (!button.disabled) {
+                if (!button.disabled && state.loggingMode) {
                     logActionFromButton(buttonId);
                 }
             });
             button.disabled = true;
+            button.classList.add('disabled');
         } else {
             console.warn(`Button with ID '${buttonId}' not found for hotkey setup.`);
         }
@@ -278,7 +303,7 @@ function removePlayer(team) {
         if (buttonToRemove) container.removeChild(buttonToRemove);
         if (state.selectedPlayerId === uniqueIdToRemove) {
             state.selectedPlayerId = null;
-            enableActionButtons(false);
+            updateActionButtonsState();
         }
         updateTeamPlayerCount(team);
         populatePlayer360RosterSelect();
@@ -328,31 +353,28 @@ function handlePlayerSelection(uniqueId) {
 
     if (previouslySelectedPlayerId === uniqueId) {
         state.selectedPlayerId = null;
-        enableActionButtons(false); 
-
-        if (state.player360SourceMode === 'activePlayer') {
-            player360VideoPlayerContainer.innerHTML = `<div class="video-placeholder-text">Player 360° view will appear here.</div>`;
-            if (player360ManualIdDisplay) player360ManualIdDisplay.textContent = ''; 
-        }
+        updateActionButtonsState();
+        player360VideoPlayerContainer.innerHTML = `<div class="video-placeholder-text">Player 360° view will appear here.</div>`;
+        if (player360ManualIdDisplay) player360ManualIdDisplay.textContent = ''; 
     } else {
         clickedButton.classList.add('selected');
         state.selectedPlayerId = uniqueId;
-        enableActionButtons(true); 
+        updateActionButtonsState();
 
-        const timestamp = getVideoPlayerTimeStamp();
-        const teamName = playerDetails.team === 'teamA' ? state.match.teamA : state.match.teamB;
+        if (state.loggingMode) {
+            const timestamp = getVideoPlayerTimeStamp();
+            const teamName = playerDetails.team === 'teamA' ? state.match.teamA : state.match.teamB;
 
-        // MODIFIED LOG FORMAT
-        const logEntry = `Player (Name: ${playerDetails.playerName || 'N/A'}, PID: ${playerDetails.playerId || 'N/A'}, Jersey: ${playerDetails.jerseyId || 'N/A'}, Manual ID: ${playerDetails.manualId || 'N/A'}) | Team (${teamName}) | Action: Player Selected | Timestamp: ${timestamp}`;
-        actionLog.push(logEntry);
-        gameLogTextBox.value += logEntry + '\n';
-        gameLogTextBox.scrollTop = gameLogTextBox.scrollHeight;
-        showGreenTick(`Selected: ${playerDetails.playerName}`);
-        copyToClipboard();
-
-        if (state.player360SourceMode === 'activePlayer') {
-            render360Content(playerDetails);
+            // MODIFIED LOG FORMAT
+            const logEntry = `Player (Name: ${playerDetails.playerName || 'N/A'}, PID: ${playerDetails.playerId || 'N/A'}, Jersey: ${playerDetails.jerseyId || 'N/A'}, Manual ID: ${playerDetails.manualId || 'N/A'}) | Team (${teamName}) | Action: Player Selected | Timestamp: ${timestamp}`;
+            actionLog.push(logEntry);
+            gameLogTextBox.value += logEntry + '\n';
+            gameLogTextBox.scrollTop = gameLogTextBox.scrollHeight;
+            showGreenTick(`Selected: ${playerDetails.playerName}`);
+            copyToClipboard();
         }
+
+        render360Content(playerDetails);
     }
 }
 
@@ -391,35 +413,91 @@ function render360Content(details) {
 
 function showEditPopup(uniqueId) {
     const details = playerDetailsMap.get(uniqueId);
-    if (!details) { alert("Error: Player details not found."); return; }
-    const content = `<h2>Edit Player Details</h2><div class="edit-form"><div class="form-group"><label for="editPlayerId">Display PID:</label><input type="text" id="editPlayerId" value="${details.playerId}" readonly></div><div class="form-group"><label for="editOrigPlayerId">Original CSV ID:</label><input type="text" id="editOrigPlayerId" value="${details.original_player_id_from_csv || 'N/A (Manual)'}" readonly></div><div class="form-group"><label for="editManualId">Manual ID:</label><input type="text" id="editManualId" value="${details.manualId==='N/A'?'':details.manualId}"></div><div class="form-group"><label for="editJerseyId">Jersey ID:</label><input type="text" id="editJerseyId" value="${details.jerseyId==='N/A'?'':details.jerseyId}"></div><div class="form-group"><label for="editPlayerName">Player Name:</label><input type="text" id="editPlayerName" value="${details.playerName==='N/A'?'':details.playerName}"></div><button id="savePlayerDetailsBtn">Save Changes</button></div>`;
-    const popupContentDiv = playerEditPopup.querySelector('.popup-content'); if (!popupContentDiv) return;
-    popupContentDiv.innerHTML = content;
-    if (!popupContentDiv.querySelector('.close')) {
-        const closeBtn = document.createElement('span'); closeBtn.classList.add('close'); closeBtn.innerHTML = '×';
-        closeBtn.onclick = () => playerEditPopup.style.display = 'none';
-        popupContentDiv.prepend(closeBtn);
+    if (!details) return;
+
+    document.getElementById('editManualId').value = details.manualId || '';
+    document.getElementById('editJerseyId').value = details.jerseyId || '';
+    document.getElementById('editPlayerName').value = details.playerName || '';
+
+    // Reset success message and preview
+    const successMessage = document.getElementById('uploadSuccessMessage');
+    if (successMessage) {
+        successMessage.style.display = 'none';
+        successMessage.style.animation = 'none';
     }
-    playerEditPopup.dataset.editingUniqueId = uniqueId;
+
+    // Reset image preview
+    if (playerImagePreview) {
+        playerImagePreview.innerHTML = '';
+        playerImagePreview.style.display = 'none';
+    }
+
+    // Show image upload section if player doesn't have a 360 video
+    if (playerImageUploadSection) {
+        if (!details.video_360_src) {
+            playerImageUploadSection.style.display = 'block';
+            if (details.video_360_thumbnail_src) {
+                const img = document.createElement('img');
+                img.src = details.video_360_thumbnail_src;
+                playerImagePreview.innerHTML = '';
+                playerImagePreview.appendChild(img);
+                playerImagePreview.style.display = 'block';
+            }
+        } else {
+            // If player has a 360 video, check if it's an uploaded image
+            const isUploadedImage = details.video_360_src.startsWith('data:image');
+            if (isUploadedImage) {
+                playerImageUploadSection.style.display = 'block';
+                const img = document.createElement('img');
+                img.src = details.video_360_src;
+                playerImagePreview.innerHTML = '';
+                playerImagePreview.appendChild(img);
+                playerImagePreview.style.display = 'block';
+            } else {
+                playerImageUploadSection.style.display = 'none';
+            }
+        }
+    }
+
+    // Reset file input
+    if (playerImageUpload) {
+        playerImageUpload.value = '';
+    }
+
+    playerEditPopup.dataset.uniqueId = uniqueId;
     playerEditPopup.style.display = 'flex';
-    const saveButton = popupContentDiv.querySelector('#savePlayerDetailsBtn');
-    if (saveButton) {
-        saveButton.replaceWith(saveButton.cloneNode(true));
-        playerEditPopup.querySelector('#savePlayerDetailsBtn').addEventListener('click', () => savePlayerDetails(uniqueId));
-    }
 }
-function savePlayerDetails(uniqueId) {
+
+function savePlayerDetails() {
+    const uniqueId = playerEditPopup.dataset.uniqueId;
+    if (!uniqueId) return;
+
     const details = playerDetailsMap.get(uniqueId);
-    if (!details) { playerEditPopup.style.display = 'none'; return; }
-    details.manualId = document.getElementById('editManualId')?.value.trim() || 'N/A';
-    details.jerseyId = document.getElementById('editJerseyId')?.value.trim() || 'N/A';
-    details.playerName = document.getElementById('editPlayerName')?.value.trim() || 'N/A';
+    if (!details) return;
+
+    // Update player details
+    details.manualId = document.getElementById('editManualId').value;
+    details.jerseyId = document.getElementById('editJerseyId').value;
+    details.playerName = document.getElementById('editPlayerName').value;
+
+    // If there's a new image uploaded, update both video and thumbnail sources
+    if (playerImagePreview.firstChild) {
+        const img = playerImagePreview.firstChild;
+        if (img.src) {
+            details.video_360_src = img.src;
+            details.video_360_thumbnail_src = img.src;
+        }
+    }
+
+    // Update the player card and refresh 360 content
     playerDetailsMap.set(uniqueId, details);
     document.querySelectorAll(`[data-unique-id="${uniqueId}"]`).forEach(updatePlayerButtonText);
-    populatePlayer360RosterSelect();
-    refresh360Content(); 
+    refresh360Content();
+    
+    // Close the popup
     playerEditPopup.style.display = 'none';
 }
+
 function updateAllPlayerButtons() {
     document.querySelectorAll('.player-button').forEach(updatePlayerButtonText);
 }
@@ -694,20 +772,36 @@ function parseHTMLTableToArray(htmlTableString) {
 function resetApplicationStateForNewFile() {
     state.match = { id: "", teamA: "Team A", teamB: "Team B", category: "", date: "", type: "", duration: "", team1_name_from_csv: "Team A", team2_name_from_csv: "Team B", team1_score: 0, team2_score: 0, avg_age: "", goalscorers: [], allGoalEvents: [] };
     state.teamA = []; state.teamB = [];
-    mediaBlobUrls.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); });
-    mediaBlobUrls.clear(); playerDetailsMap.clear();
-    teamAPlayerButtonsContainer.innerHTML = ''; teamBPlayerButtonsContainer.innerHTML = '';
-    updateTeamPlayerCount('teamA'); updateTeamPlayerCount('teamB');
-    state.selectedPlayerId = null; state.nextUniqueId = 1;
-    enableActionButtons(false);
+    mediaBlobUrls.forEach(url => { 
+        if (url.startsWith('blob:')) {
+            URL.revokeObjectURL(url);
+        }
+    });
+    mediaBlobUrls.clear(); 
+    playerDetailsMap.clear();
+    teamAPlayerButtonsContainer.innerHTML = ''; 
+    teamBPlayerButtonsContainer.innerHTML = '';
+    updateTeamPlayerCount('teamA'); 
+    updateTeamPlayerCount('teamB');
+    state.selectedPlayerId = null; 
+    state.nextUniqueId = 1;
+    state.loggingMode = false;
+    if (loggingModeToggle) loggingModeToggle.checked = false;
+    updateActionButtonsState();
     youtubeVideoIdInput.value = "";
-    if (videoPlayer && typeof videoPlayer.stopVideo === 'function') { try { videoPlayer.stopVideo(); videoPlayer.clearVideo?.(); } catch(e){/*ignore*/} }
-    state.player360ViewType = 'video'; document.querySelector('input[name="player360ViewMode"][value="video"]').checked = true;
-    state.player360SourceMode = 'fullRoster'; document.querySelector('input[name="player360SourceMode"][value="fullRoster"]').checked = true;
-    document.querySelector('.player-360-full-roster-controls').style.display = 'block';
+    if (videoPlayer && typeof videoPlayer.stopVideo === 'function') { 
+        try { 
+            videoPlayer.stopVideo(); 
+            videoPlayer.clearVideo?.(); 
+        } catch(e){/*ignore*/} 
+    }
+    state.player360ViewType = 'video'; 
+    document.querySelector('input[name="player360ViewMode"][value="video"]').checked = true;
     if(player360ManualIdDisplay) player360ManualIdDisplay.textContent = ''; 
-    updateLiveScoreDisplay(); updateMatchDetailsDisplay();
-    actionLog = []; gameLogTextBox.value = "";
+    updateLiveScoreDisplay(); 
+    updateMatchDetailsDisplay();
+    actionLog = []; 
+    gameLogTextBox.value = "";
     console.log("Application state reset for new file.");
 }
 
@@ -917,10 +1011,151 @@ function populatePlayer360RosterSelect() {
 document.addEventListener('DOMContentLoaded', () => {
     updateMatchDetailsDisplay(); updateLiveScoreDisplay(); populatePlayer360RosterSelect();
     setupActionButtons();
-    enableActionButtons(false);
+    state.loggingMode = false;
+    if (loggingModeToggle) loggingModeToggle.checked = false;
+    updateActionButtonsState();
     if(player360ManualIdDisplay) player360ManualIdDisplay.textContent = ''; 
     const nameLayoutRadio = document.querySelector('input[name="layout"][value="name"]'); if (nameLayoutRadio) nameLayoutRadio.checked = true;
     const videoViewRadio = document.querySelector('input[name="player360ViewMode"][value="video"]'); if (videoViewRadio) videoViewRadio.checked = true;
-    const fullRosterSourceRadio = document.querySelector('input[name="player360SourceMode"][value="fullRoster"]'); if (fullRosterSourceRadio) fullRosterSourceRadio.checked = true;
     console.log("DOM Loaded. Initial state:", state);
 });
+
+// Add reset game log functionality
+document.getElementById('resetGameLogButton').addEventListener('click', () => {
+    if (confirm('Are you sure you want to reset the game log? This will clear all logged actions.')) {
+        actionLog = [];
+        gameLogTextBox.value = '';
+        showGreenTick('Game log has been reset');
+    }
+});
+
+// Add logging mode toggle functionality
+const loggingModeToggle = document.getElementById('loggingModeToggle');
+if (loggingModeToggle) {
+    loggingModeToggle.addEventListener('change', (event) => {
+        state.loggingMode = event.target.checked;
+        // Deselect current player if any
+        if (state.selectedPlayerId) {
+            const selectedButton = document.querySelector(`.player-button[data-unique-id="${state.selectedPlayerId}"]`);
+            if (selectedButton) {
+                selectedButton.classList.remove('selected');
+            }
+            state.selectedPlayerId = null;
+            player360VideoPlayerContainer.innerHTML = `<div class="video-placeholder-text">Player 360° view will appear here.</div>`;
+            if (player360ManualIdDisplay) player360ManualIdDisplay.textContent = '';
+        }
+        updateActionButtonsState();
+    });
+}
+
+function updateActionButtonsState() {
+    const actionButtons = document.querySelectorAll('.action-panel .action-section button');
+    actionButtons.forEach(button => {
+        if (!state.loggingMode) {
+            button.classList.add('disabled');
+        } else {
+            button.classList.remove('disabled');
+            // Only enable buttons if a player is selected
+            button.disabled = !state.selectedPlayerId;
+        }
+    });
+}
+
+function showGoalConfirmation(uniqueId, actionType) {
+    const details = playerDetailsMap.get(uniqueId);
+    if (!details) return;
+
+    // Store the pending action
+    pendingGoalAction = {
+        uniqueId,
+        actionType,
+        timestamp: new Date().toISOString()
+    };
+
+    // Update popup title based on action type
+    const popupTitle = document.querySelector('#goalConfirmationPopup h2');
+    if (popupTitle) {
+        popupTitle.textContent = `Confirm ${actionType === 'goal' ? 'Goal' : 'Own Goal'}`;
+    }
+
+    // Update player info with all details
+    const playerInfo = document.getElementById('goalPlayerInfo');
+    if (playerInfo) {
+        playerInfo.innerHTML = `
+            <div><strong>Player Name:</strong> ${details.playerName || 'N/A'}</div>
+            <div><strong>Jersey Number:</strong> ${details.jerseyId || 'N/A'}</div>
+            <div><strong>Manual ID:</strong> ${details.manualId || 'N/A'}</div>
+            <div><strong>Player ID:</strong> ${details.playerId || 'N/A'}</div>
+        `;
+    }
+
+    // Show player preview using thumbnail
+    const previewContainer = document.getElementById('goalPlayerPreview');
+    if (previewContainer) {
+        previewContainer.innerHTML = '';
+        if (details.video_360_thumbnail_src) {
+            const img = document.createElement('img');
+            img.src = details.video_360_thumbnail_src;
+            previewContainer.appendChild(img);
+        }
+    }
+
+    // Show the popup
+    const popup = document.getElementById('goalConfirmationPopup');
+    if (popup) {
+        popup.style.display = 'flex';
+    }
+}
+
+function confirmGoalAction() {
+    if (!pendingGoalAction) return;
+
+    const { uniqueId, actionType } = pendingGoalAction;
+    const details = playerDetailsMap.get(uniqueId);
+    if (!details) return;
+
+    // Log the action directly instead of calling logActionFromButton
+    const actionText = actionType === 'goal' ? 'Goal' : 'Own Goal';
+    const timestamp = getVideoPlayerTimeStamp();
+    const teamName = details.team === 'teamA' ? state.match.teamA : state.match.teamB;
+
+    const logEntry = `Player (Name: ${details.playerName || 'N/A'}, PID: ${details.playerId || 'N/A'}, Jersey: ${details.jerseyId || 'N/A'}, Manual ID: ${details.manualId || 'N/A'}) | Team (${teamName}) | Action: ${actionText} | Timestamp: ${timestamp}`;
+    actionLog.push(logEntry);
+    gameLogTextBox.value += logEntry + '\n';
+
+    showGreenTick(`Logged: ${actionText}`);
+    copyToClipboard();
+
+    // Close the popup
+    const popup = document.getElementById('goalConfirmationPopup');
+    if (popup) {
+        popup.style.display = 'none';
+    }
+
+    // Clear the pending action
+    pendingGoalAction = null;
+}
+
+function cancelGoalAction() {
+    // Close the popup
+    const popup = document.getElementById('goalConfirmationPopup');
+    if (popup) {
+        popup.style.display = 'none';
+    }
+
+    // Clear the pending action
+    pendingGoalAction = null;
+}
+
+// Update the goal and own goal button click handlers to use confirmation
+document.getElementById('goalBtn').onclick = () => {
+    if (state.selectedPlayerId) {
+        showGoalConfirmation(state.selectedPlayerId, 'goal');
+    }
+};
+
+document.getElementById('ownGoalBtn').onclick = () => {
+    if (state.selectedPlayerId) {
+        showGoalConfirmation(state.selectedPlayerId, 'ownGoal');
+    }
+};
