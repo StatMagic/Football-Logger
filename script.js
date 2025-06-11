@@ -929,11 +929,12 @@ async function parseAndSetupPlayersCSV(csvText, zip) {
     const headers = lines[0].split(',').map(h => h.trim()); const dataRows = lines.slice(1);
     const pIdCol = headers.indexOf("player_id"), pNameCol = headers.indexOf("player_name"), teamIdCol = headers.indexOf("team_identifier"), vidFileCol = headers.indexOf("video_360_filename");
     if ([pIdCol, pNameCol, teamIdCol].some(idx => idx === -1)) { alert("players.csv missing columns."); return; }
-    let teamACtr = 0, teamBCtr = 0;
+
     const promises = dataRows.map(async rowStr => {
         const vals = rowStr.split(',').map(v => v.trim());
         const csvPId = vals[pIdCol], pName = vals[pNameCol] || `P ${csvPId.slice(-3)}`, teamId = vals[teamIdCol], bareVidFile = vidFileCol !== -1 ? (vals[vidFileCol]||"") : "";
         if (!csvPId || !teamId) return;
+
         let vidSrc = "", thumbSrc = "", vidPathZip = bareVidFile ? `player_360_videos/${bareVidFile}` : "";
         if (vidPathZip && zip) {
             const vidFileInZip = zip.file(vidPathZip);
@@ -942,16 +943,43 @@ async function parseAndSetupPlayersCSV(csvText, zip) {
                 catch (e) { console.error(`Err extracting ${vidPathZip}`, e); }
             } else console.warn(`Vid ${vidPathZip} not in ZIP for ${csvPId}`);
         }
-        let targetTeam, targetCont, isOppo, intTeamId, dispPID;
-        if (teamId === "team1") { targetTeam = state.teamA; targetCont = teamAPlayerButtonsContainer; isOppo = false; intTeamId = 'teamA'; dispPID = `A${++teamACtr}`; }
-        else if (teamId === "team2") { targetTeam = state.teamB; targetCont = teamBPlayerButtonsContainer; isOppo = true; intTeamId = 'teamB'; dispPID = `B${++teamBCtr}`; }
+
+        let targetTeam, targetCont, isOppo, intTeamId;
+        if (teamId === "team1") { 
+            targetTeam = state.teamA; 
+            targetCont = teamAPlayerButtonsContainer; 
+            isOppo = false; 
+            intTeamId = 'teamA'; 
+        }
+        else if (teamId === "team2") { 
+            targetTeam = state.teamB; 
+            targetCont = teamBPlayerButtonsContainer; 
+            isOppo = true; 
+            intTeamId = 'teamB'; 
+        }
         else return;
+
         targetTeam.push(csvPId);
-        playerDetailsMap.set(csvPId, { playerId: dispPID, original_player_id_from_csv: csvPId, manualId: 'N/A', jerseyId: 'N/A', playerName: pName, team: intTeamId, video_360_filename: bareVidFile, video_360_src: vidSrc, video_360_thumbnail_src: thumbSrc });
-        const btn = createPlayerButton(csvPId, isOppo); btn.addEventListener('click', () => handlePlayerSelection(csvPId)); targetCont.appendChild(btn);
+        playerDetailsMap.set(csvPId, { 
+            playerId: csvPId,  // Use original PID as the display PID
+            original_player_id_from_csv: csvPId, 
+            manualId: 'N/A', 
+            jerseyId: 'N/A', 
+            playerName: pName, 
+            team: intTeamId, 
+            video_360_filename: bareVidFile, 
+            video_360_src: vidSrc, 
+            video_360_thumbnail_src: thumbSrc 
+        });
+        
+        const btn = createPlayerButton(csvPId, isOppo); 
+        btn.addEventListener('click', () => handlePlayerSelection(csvPId)); 
+        targetCont.appendChild(btn);
     });
+
     await Promise.all(promises);
-    updateTeamPlayerCount('teamA'); updateTeamPlayerCount('teamB');
+    updateTeamPlayerCount('teamA'); 
+    updateTeamPlayerCount('teamB');
 }
 
 function captureVideoFrame(videoSrc, desiredWidth = 320, quality = 0.8) {
@@ -1159,3 +1187,111 @@ document.getElementById('ownGoalBtn').onclick = () => {
         showGoalConfirmation(state.selectedPlayerId, 'ownGoal');
     }
 };
+
+// Add event listener for the download analysis button
+document.getElementById('downloadAnalysis').addEventListener('click', downloadAnalysis);
+
+async function downloadAnalysis() {
+    try {
+        // Create a new zip file
+        const zip = new JSZip();
+
+        // Create updated players.csv content
+        const playersCSV = createUpdatedPlayersCSV();
+        zip.file("players.csv", playersCSV);
+
+        // Add game log
+        zip.file("game_log.txt", gameLogTextBox.value);
+        zip.file("game_highlights.txt", gameHighlightsTextBox.value);
+
+        // Create folders for player media
+        const mediaFolder = zip.folder("player_360_videos");
+        const thumbnailsFolder = zip.folder("player_360_thumbnails");
+
+        // Add all player media files and thumbnails
+        for (const [uniqueId, details] of playerDetailsMap.entries()) {
+            // Add video if exists
+            if (details.video_360_filename) {
+                if (details.video_360_src && details.video_360_src.startsWith('blob:')) {
+                    try {
+                        const response = await fetch(details.video_360_src);
+                        const blob = await response.blob();
+                        mediaFolder.file(details.video_360_filename, blob);
+                    } catch (error) {
+                        console.error(`Error adding video for player ${uniqueId}:`, error);
+                    }
+                }
+            }
+
+            // Add thumbnail if exists
+            if (details.video_360_thumbnail_src) {
+                try {
+                    let thumbnailBlob;
+                    if (details.video_360_thumbnail_src.startsWith('blob:')) {
+                        // If it's a blob URL, fetch it
+                        const response = await fetch(details.video_360_thumbnail_src);
+                        thumbnailBlob = await response.blob();
+                    } else if (details.video_360_thumbnail_src.startsWith('data:')) {
+                        // If it's a data URL, convert it to blob
+                        const response = await fetch(details.video_360_thumbnail_src);
+                        thumbnailBlob = await response.blob();
+                    }
+
+                    if (thumbnailBlob) {
+                        // Generate thumbnail filename based on player ID
+                        const thumbnailFilename = `${uniqueId}_thumbnail.jpg`;
+                        thumbnailsFolder.file(thumbnailFilename, thumbnailBlob);
+                    }
+                } catch (error) {
+                    console.error(`Error adding thumbnail for player ${uniqueId}:`, error);
+                }
+            }
+        }
+
+        // Generate and download the zip file
+        const content = await zip.generateAsync({type: "blob"});
+        const safeTeamA = (state.match.teamA||'TeamA').replace(/[^a-z0-9]/gi,'_');
+        const safeTeamB = (state.match.teamB||'TeamB').replace(/[^a-z0-9]/gi,'_');
+        const safeMatchId = (state.match.id||'Match').replace(/[^a-z0-9]/gi,'_');
+        const fileName = `${safeMatchId}_${safeTeamA}_vs_${safeTeamB}_Analysis.zip`;
+        
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+
+        showGreenTick('Analysis downloaded successfully');
+    } catch (error) {
+        console.error('Error creating analysis download:', error);
+        alert('Error creating analysis download. Please try again.');
+    }
+}
+
+function createUpdatedPlayersCSV() {
+    // Create headers
+    const headers = ["player_id", "player_name", "team_identifier", "manual_id", "jersey_id", "video_360_filename", "thumbnail_filename"];
+    
+    // Create rows for each player
+    const rows = Array.from(playerDetailsMap.entries()).map(([uniqueId, details]) => {
+        return [
+            uniqueId, // original player ID
+            details.playerName || 'N/A',
+            details.team === 'teamA' ? 'team1' : 'team2',
+            details.manualId || 'N/A',
+            details.jerseyId || 'N/A',
+            details.video_360_filename || '',
+            details.video_360_thumbnail_src ? `${uniqueId}_thumbnail.jpg` : '' // Add thumbnail filename
+        ];
+    });
+
+    // Combine headers and rows
+    const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    return csvContent;
+}
