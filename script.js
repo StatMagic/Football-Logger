@@ -54,8 +54,8 @@ const playerEditPopup = document.getElementById('playerEditPopup');
 const layoutControls = document.querySelectorAll('input[name="layout"]');
 const undoButton = document.getElementById('undoButton');
 const matchVideoPlayer = document.getElementById('matchVideoPlayer');
-const youtubeVideoIdInput = document.getElementById('youtubeVideoIdInput');
-const updateYoutubeVideoButton = document.getElementById('updateYoutubeVideoButton');
+const videoUrlInput = document.getElementById('videoUrlInput');
+const updateVideoButton = document.getElementById('updateVideoButton');
 const displayMatchSummaryText = document.getElementById('displayMatchSummaryText');
 const player360ViewModeRadios = document.querySelectorAll('input[name="player360ViewMode"]');
 const player360RosterSelect = document.getElementById('player360RosterSelect');
@@ -105,7 +105,7 @@ removeTeamBPlayerButton.addEventListener('click', () => removePlayer('teamB'));
 undoButton.addEventListener('click', undoAction);
 document.getElementById('saveToHighlightsButton').addEventListener('click', startStopHighlights);
 document.getElementById('calculateStats').addEventListener('click', calculateStats);
-updateYoutubeVideoButton.addEventListener('click', updateYouTubeVideo);
+updateVideoButton.addEventListener('click', updateVideo);
 
 if (uploadMatchFileButton && matchFileUploadInput) {
     uploadMatchFileButton.addEventListener('click', () => {
@@ -604,14 +604,15 @@ window.addEventListener('click', (e) => {
     }
 });
 function getVideoPlayerTimeStamp() {
-    if (videoPlayer && typeof videoPlayer.getCurrentTime === 'function') {
-        try {
-            const currentTime = videoPlayer.getCurrentTime();
-            if (typeof currentTime === 'number' && !isNaN(currentTime)) {
-                const hours = Math.floor(currentTime/3600); const minutes = Math.floor((currentTime%3600)/60); const secs = Math.floor(currentTime%60);
-                return `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
-            }
-        } catch (err) { /* ignore */ }
+    const videoElement = matchVideoPlayer.querySelector('video');
+    if (videoElement) {
+        const currentTime = videoElement.currentTime;
+        if (typeof currentTime === 'number' && !isNaN(currentTime)) {
+            const hours = Math.floor(currentTime/3600);
+            const minutes = Math.floor((currentTime%3600)/60);
+            const secs = Math.floor(currentTime%60);
+            return `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+        }
     }
     return '00:00:00';
 }
@@ -642,131 +643,28 @@ function showGreenTick(message) {
         }
     }, 2000);
 }
-function updateYouTubeVideo() {
-    const youtubeVideoId = youtubeVideoIdInput.value.trim();
-    if (youtubeVideoId && videoPlayer && typeof videoPlayer.loadVideoById === 'function') videoPlayer.loadVideoById(youtubeVideoId);
-    else if (!youtubeVideoId) alert('Please enter a YouTube Video ID.');
-    else alert('YouTube player is not ready yet.');
-}
 
-document.addEventListener('keydown', (event) => {
-    const activeElement = document.activeElement;
-    const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable);
-
-    if (event.key.toUpperCase() === 'H' && !isInputFocused) {
-        event.preventDefault();
-        startStopHighlights();
+function updateVideo() {
+    const videoUrl = videoUrlInput.value.trim();
+    if (!videoUrl) {
+        alert('Please enter a video URL.');
         return;
     }
 
-    if (isInputFocused) {
-        return;
+    // Create video element if it doesn't exist
+    if (!matchVideoPlayer.querySelector('video')) {
+        const videoElement = document.createElement('video');
+        videoElement.controls = true;
+        videoElement.style.width = '100%';
+        videoElement.style.height = '100%';
+        matchVideoPlayer.innerHTML = '';
+        matchVideoPlayer.appendChild(videoElement);
     }
 
-    let actionHotkeyPressed = false;
-    if (state.selectedPlayerId) {
-        for (const [buttonId, config] of actionButtonHotkeys.entries()) {
-            const keyMatch = event.key.toUpperCase() === config.key.toUpperCase();
-            const shiftStateMatch = config.shiftKey === event.shiftKey;
-
-            if (keyMatch && shiftStateMatch) {
-                const button = document.getElementById(buttonId);
-                if (button && !button.disabled) {
-                    event.preventDefault();
-                    logActionFromButton(buttonId);
-                    actionHotkeyPressed = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (actionHotkeyPressed) {
-        return;
-    }
-
-    if (videoPlayer && typeof videoPlayer.getPlayerState === 'function') {
-        let preventDefaultForYouTube = true;
-        switch (event.key.toUpperCase()) {
-            case ' ': case 'K':
-                const playerState = videoPlayer.getPlayerState();
-                if (playerState === YT.PlayerState.PLAYING) videoPlayer.pauseVideo();
-                else if (playerState === YT.PlayerState.PAUSED || playerState === YT.PlayerState.ENDED || playerState === YT.PlayerState.CUED) videoPlayer.playVideo();
-                break;
-            case 'ARROWLEFT': videoPlayer.seekTo(Math.max(0, videoPlayer.getCurrentTime() - 5), true); break;
-            case 'ARROWRIGHT': videoPlayer.seekTo(videoPlayer.getCurrentTime() + 5, true); break;
-            case 'ARROWUP': videoPlayer.setVolume(Math.min(100, videoPlayer.getVolume() + 5)); break;
-            case 'ARROWDOWN': videoPlayer.setVolume(Math.max(0, videoPlayer.getVolume() - 5)); break;
-            case 'M': videoPlayer.isMuted() ? videoPlayer.unMute() : videoPlayer.mute(); break;
-            case 'J':
-                const miscontrolConfig = actionButtonHotkeys.get('miscontrolBtn');
-                if (miscontrolConfig && event.key.toUpperCase() === miscontrolConfig.key.toUpperCase() && state.selectedPlayerId && document.getElementById('miscontrolBtn') && !document.getElementById('miscontrolBtn').disabled) {
-                     preventDefaultForYouTube = false;
-                } else {
-                    videoPlayer.seekTo(Math.max(0, videoPlayer.getCurrentTime() - 10), true);
-                }
-                break;
-            case 'L':
-                 const longPassConfig = actionButtonHotkeys.get('longPassBtn');
-                 if (longPassConfig && event.key.toUpperCase() === longPassConfig.key.toUpperCase() && state.selectedPlayerId && document.getElementById('longPassBtn') && !document.getElementById('longPassBtn').disabled) {
-                     preventDefaultForYouTube = false;
-                 } else {
-                    videoPlayer.seekTo(videoPlayer.getCurrentTime() + 10, true);
-                 }
-                 break;
-            case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-                let isActionNumberHotkey = false;
-                for(const [btnId, cfg] of actionButtonHotkeys.entries()){
-                    if(cfg.key === event.key && !cfg.shiftKey && state.selectedPlayerId && document.getElementById(btnId) && !document.getElementById(btnId).disabled){
-                        isActionNumberHotkey = true;
-                        break;
-                    }
-                }
-                if(!isActionNumberHotkey && videoPlayer.getDuration){
-                    const percentage = parseInt(event.key);
-                    const duration = videoPlayer.getDuration();
-                    videoPlayer.seekTo(duration * (percentage / 10), true);
-                } else {
-                     preventDefaultForYouTube = false;
-                }
-                break;
-            default: preventDefaultForYouTube = false; break;
-        }
-        if (preventDefaultForYouTube) event.preventDefault();
-    }
-});
-
-function onYouTubeIframeAPIReady() { try { videoPlayer = new YT.Player('matchVideoPlayer', { width: '100%', height: '100%', videoId: '', playerVars: {'autoplay':0, 'controls':1, 'rel':0, 'showinfo':0, 'modestbranding':1}, events: {'onReady': ()=>{console.log("YT Player Ready")}, 'onError': (e)=>{console.error("YT Error:", e.data)} } }); } catch (error) { console.error("Error initializing YouTube player:", error); } }
-
-function exportTablesToZip() {
-    const playerStatsContainer = document.getElementById('playerStatsContainer');
-    const matchStatsContainer = document.getElementById('matchStatsContainer');
-    if (!playerStatsContainer || !matchStatsContainer) return;
-    const playerTableHTML = playerStatsContainer.innerHTML;
-    const matchTableHTML = matchStatsContainer.innerHTML;
-    let playerSheetData = [["Player Stats (Parser Needs Update)"]];
-    let matchSheetData = [["Match Stats (Parser Needs Update)"]];
-    if (playerStatsContainer.querySelector('table')) { playerSheetData = parseHTMLTableToArray(playerStatsContainer.querySelector('table').outerHTML); }
-    if (matchStatsContainer.querySelector('table')) { matchSheetData = parseHTMLTableToArray(matchStatsContainer.querySelector('table').outerHTML); }
-    let wb;
-    try { wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(playerSheetData), "Player Stats"); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matchSheetData), "Match Stats"); }
-    catch (error) { console.error("Error creating Excel data:", error); return; }
-    const gameLogContent = gameLogTextBox.value; const highlightsContent = gameHighlightsTextBox.value;
-    const combinedLogContent = `Game Log:\n${gameLogContent}\n\n--------\n\nGame Highlights:\n${highlightsContent}`;
-    const zip = new JSZip();
-    const safeTeamA = (state.match.teamA||'TeamA').replace(/[^a-z0-9]/gi,'_'); const safeTeamB = (state.match.teamB||'TeamB').replace(/[^a-z0-9]/gi,'_'); const safeMatchId = (state.match.id||'Match').replace(/[^a-z0-9]/gi,'_');
-    const baseFileName = `${safeMatchId}_${safeTeamA}_vs_${safeTeamB}`;
-    try { zip.file(`${baseFileName}_Stats.xlsx`, XLSX.write(wb, {bookType:"xlsx", type:"array"})); } catch (error) { console.error("Error writing Excel to ZIP:", error); }
-    zip.file(`${baseFileName}_GameLog.txt`, gameLogContent); zip.file(`${baseFileName}_Highlights.txt`, highlightsContent); zip.file(`${baseFileName}_CombinedLogs.txt`, combinedLogContent);
-    zip.generateAsync({type:"blob"}).then(content => { const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = `${baseFileName}_Export.zip`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); }).catch(err => console.error("Error generating ZIP file:", err));
-}
-function parseHTMLTableToArray(htmlTableString) {
-    const doc = new DOMParser().parseFromString(htmlTableString, 'text/html');
-    const tableElement = doc.querySelector('table'); if (!tableElement) return [];
-    const data = []; const headers = Array.from(tableElement.querySelectorAll('thead th')).map(th => th.textContent?.trim() || '');
-    if (headers.length > 0) data.push(headers);
-    Array.from(tableElement.querySelectorAll('tbody tr')).forEach(row => { const rowData = Array.from(row.querySelectorAll('td')).map(td => td.textContent?.trim() || ''); if (rowData.length > 0) data.push(rowData); });
-    return data;
+    // Update video source
+    const videoElement = matchVideoPlayer.querySelector('video');
+    videoElement.src = videoUrl;
+    videoElement.load();
 }
 
 function resetApplicationStateForNewFile() {
@@ -788,12 +686,12 @@ function resetApplicationStateForNewFile() {
     state.loggingMode = false;
     if (loggingModeToggle) loggingModeToggle.checked = false;
     updateActionButtonsState();
-    youtubeVideoIdInput.value = "";
-    if (videoPlayer && typeof videoPlayer.stopVideo === 'function') { 
-        try { 
-            videoPlayer.stopVideo(); 
-            videoPlayer.clearVideo?.(); 
-        } catch(e){/*ignore*/} 
+    videoUrlInput.value = "";
+    if (matchVideoPlayer.querySelector('video')) {
+        const videoElement = matchVideoPlayer.querySelector('video');
+        videoElement.pause();
+        videoElement.src = '';
+        videoElement.load();
     }
     state.player360ViewType = 'video'; 
     document.querySelector('input[name="player360ViewMode"][value="video"]').checked = true;
@@ -1075,7 +973,6 @@ if (loggingModeToggle) {
         updateActionButtonsState();
     });
 }
-
 function updateActionButtonsState() {
     const actionButtons = document.querySelectorAll('.action-panel .action-section button');
     actionButtons.forEach(button => {
@@ -1295,3 +1192,102 @@ function createUpdatedPlayersCSV() {
 
     return csvContent;
 }
+
+document.addEventListener('keydown', (event) => {
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable);
+
+    if (event.key.toUpperCase() === 'H' && !isInputFocused) {
+        event.preventDefault();
+        startStopHighlights();
+        return;
+    }
+
+    if (isInputFocused) {
+        return;
+    }
+
+    let actionHotkeyPressed = false;
+    if (state.selectedPlayerId) {
+        for (const [buttonId, config] of actionButtonHotkeys.entries()) {
+            const keyMatch = event.key.toUpperCase() === config.key.toUpperCase();
+            const shiftStateMatch = config.shiftKey === event.shiftKey;
+
+            if (keyMatch && shiftStateMatch) {
+                const button = document.getElementById(buttonId);
+                if (button && !button.disabled) {
+                    event.preventDefault();
+                    logActionFromButton(buttonId);
+                    actionHotkeyPressed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (actionHotkeyPressed) {
+        return;
+    }
+
+    const videoElement = matchVideoPlayer.querySelector('video');
+    if (videoElement) {
+        let preventDefaultForVideo = true;
+        switch (event.key.toUpperCase()) {
+            case ' ': case 'K':
+                if (videoElement.paused) videoElement.play();
+                else videoElement.pause();
+                break;
+            case 'ARROWLEFT':
+                videoElement.currentTime = Math.max(0, videoElement.currentTime - 5);
+                break;
+            case 'ARROWRIGHT':
+                videoElement.currentTime = videoElement.currentTime + 5;
+                break;
+            case 'ARROWUP':
+                videoElement.volume = Math.min(1, videoElement.volume + 0.1);
+                break;
+            case 'ARROWDOWN':
+                videoElement.volume = Math.max(0, videoElement.volume - 0.1);
+                break;
+            case 'M':
+                videoElement.muted = !videoElement.muted;
+                break;
+            case 'J':
+                const miscontrolConfig = actionButtonHotkeys.get('miscontrolBtn');
+                if (miscontrolConfig && event.key.toUpperCase() === miscontrolConfig.key.toUpperCase() && state.selectedPlayerId && document.getElementById('miscontrolBtn') && !document.getElementById('miscontrolBtn').disabled) {
+                    preventDefaultForVideo = false;
+                } else {
+                    videoElement.currentTime = Math.max(0, videoElement.currentTime - 10);
+                }
+                break;
+            case 'L':
+                const longPassConfig = actionButtonHotkeys.get('longPassBtn');
+                if (longPassConfig && event.key.toUpperCase() === longPassConfig.key.toUpperCase() && state.selectedPlayerId && document.getElementById('longPassBtn') && !document.getElementById('longPassBtn').disabled) {
+                    preventDefaultForVideo = false;
+                } else {
+                    videoElement.currentTime = videoElement.currentTime + 10;
+                }
+                break;
+            case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+                let isActionNumberHotkey = false;
+                for(const [btnId, cfg] of actionButtonHotkeys.entries()){
+                    if(cfg.key === event.key && !cfg.shiftKey && state.selectedPlayerId && document.getElementById(btnId) && !document.getElementById(btnId).disabled){
+                        isActionNumberHotkey = true;
+                        break;
+                    }
+                }
+                if(!isActionNumberHotkey && videoElement.duration) {
+                    const percentage = parseInt(event.key);
+                    videoElement.currentTime = videoElement.duration * (percentage / 10);
+                } else {
+                    preventDefaultForVideo = false;
+                }
+                break;
+            default:
+                preventDefaultForVideo = false;
+                break;
+        }
+        if (preventDefaultForVideo) event.preventDefault();
+    }
+});
+
