@@ -28,7 +28,8 @@ const state = {
         currentState: "START"
     },
     player360ViewType: 'video',
-    loggingMode: false
+    loggingMode: false,
+    originalPlayersCSV: null
 };
 
 const playerDetailsMap = new Map();
@@ -700,6 +701,7 @@ function resetApplicationStateForNewFile() {
     updateMatchDetailsDisplay();
     actionLog = []; 
     gameLogTextBox.value = "";
+    state.originalPlayersCSV = null;
     console.log("Application state reset for new file.");
 }
 
@@ -761,8 +763,13 @@ async function processUploadedMatchFile(file) {
         else { console.log("goalscorers.csv not found."); state.match.allGoalEvents = []; state.match.team1_score = 0; state.match.team2_score = 0; }
 
         const playersFile = zip.file("players.csv");
-        if (playersFile) await parseAndSetupPlayersCSV(await playersFile.async("text"), zip);
-        else alert("players.csv not found.");
+        if (playersFile) {
+            const playersCSVContent = await playersFile.async("text");
+            state.originalPlayersCSV = playersCSVContent;
+            await parseAndSetupPlayersCSV(playersCSVContent, zip);
+        } else {
+            alert("players.csv not found.");
+        }
 
         updateMatchDetailsDisplay(); updateLiveScoreDisplay(); updateAllPlayerButtons(); populatePlayer360RosterSelect();
         document.querySelector('input[name="layout"][value="name"]').checked = true; state.currentLayout = 'name';
@@ -1096,6 +1103,11 @@ async function downloadAnalysis() {
         // Create updated players.csv content
         const playersCSV = createUpdatedPlayersCSV();
         zip.file("players.csv", playersCSV);
+
+        // Add original players.csv as players_old.csv
+        if (state.originalPlayersCSV) {
+            zip.file("players_old.csv", state.originalPlayersCSV);
+        }
 
         // Add game log
         zip.file("game_log.txt", gameLogTextBox.value);
